@@ -35,12 +35,13 @@ type JHOAuthHandler struct {
 func validateCookie(r *http.Request) bool {
 	cookie, err := r.Cookie(cookieName)
 	if err != nil {
+		log.Println(err)
 		return false
 	}
-	var value string
 
+	var value string
 	if err = cookieSource.Decode(cookieName, cookie.Value, &value); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return false
 	}
 
@@ -49,20 +50,20 @@ func validateCookie(r *http.Request) bool {
 	if res, err := http.DefaultClient.Do(req); err == nil {
 		payload, err := ioutil.ReadAll(res.Body)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return false
 		}
 		var resp map[string]interface{}
 		err = json.Unmarshal(payload, &resp)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return false
 		}
 		if resp["name"] == jhUser {
 			return true
 		}
 	} else {
-		fmt.Println(err)
+		log.Println(err)
 	}
 	return false
 }
@@ -79,7 +80,7 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 			"redirect_uri":  {callbackUrl},
 		})
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			w.WriteHeader(500)
 			return
 		}
@@ -87,13 +88,13 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 			var resp map[string]interface{}
 			payload, err := ioutil.ReadAll(res.Body)
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err)
 				w.WriteHeader(500)
 				return
 			}
 			err = json.Unmarshal(payload, &resp)
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err)
 				w.WriteHeader(500)
 				return
 			}
@@ -107,17 +108,16 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 				}
 				http.SetCookie(w, cookie)
 				http.Redirect(w, r, servicePrefix, http.StatusFound)
-				return
 			} else {
+				log.Println(err)
 				w.WriteHeader(500)
-				return
 			}
 		}
 	}
 }
 
 func (ah JHOAuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(r.URL.Path)
+	log.Println(r.URL.Path)
 	if validateCookie(r) {
 		ah.wrappedHandler.ServeHTTP(w, r)
 	} else if r.URL.Path == callbackUrl {
@@ -146,11 +146,14 @@ func newPathTrimmingReverseProxy(target *url.URL) *httputil.ReverseProxy {
 
 func main() {
 	flag.Parse()
-	backend, _ := url.Parse(*target)
+	backend, err := url.Parse(*target)
+	if err != nil {
+		log.Fatalln(err)
+	}
 	handler := JHOAuthHandler{
 		wrappedHandler: newPathTrimmingReverseProxy(backend),
 	}
-	err := http.ListenAndServe(":"+*port, handler)
+	err = http.ListenAndServe(":"+*port, handler)
 	if err != nil {
 		log.Fatalln(err)
 	}
