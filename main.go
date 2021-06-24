@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gorilla/securecookie"
 )
@@ -107,6 +108,8 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 					HttpOnly: true,
 				}
 				http.SetCookie(w, cookie)
+				cookie.Path = strings.Replace(servicePrefix, "@", "%40", -1)
+				http.SetCookie(w, cookie)
 				http.Redirect(w, r, servicePrefix, http.StatusFound)
 			} else {
 				log.Println(err)
@@ -125,7 +128,7 @@ func (ah JHOAuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cookie := http.Cookie{Name: "jh-proxy-auth-state", Value: r.URL.String(), MaxAge: 600, Path: servicePrefix}
 		http.SetCookie(w, &cookie)
-		params := fmt.Sprintf("?client_id=%s&redirect_uri=%s&response_type=code&state=", clientId, url.QueryEscape(callbackUrl))
+		params := fmt.Sprintf("?client_id=%s&redirect_uri=%s&response_type=code&state=", url.QueryEscape(clientId), url.QueryEscape(callbackUrl))
 		http.Redirect(w, r, "/hub/api/oauth2/authorize"+params, http.StatusFound)
 	}
 }
@@ -153,6 +156,16 @@ func main() {
 	handler := JHOAuthHandler{
 		wrappedHandler: newPathTrimmingReverseProxy(backend),
 	}
+
+	// wait until target is reachable
+	for {
+		res, err := http.Get(backend.String())
+		if err == nil && res.StatusCode == 200 {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
 	err = http.ListenAndServe(":"+*port, handler)
 	if err != nil {
 		log.Fatalln(err)
