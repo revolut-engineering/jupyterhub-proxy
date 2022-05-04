@@ -24,6 +24,7 @@ var (
 	callbackUrl   = os.Getenv("JUPYTERHUB_OAUTH_CALLBACK_URL")
 	servicePrefix = os.Getenv("JUPYTERHUB_SERVICE_PREFIX")
 	jhUser        = os.Getenv("JUPYTERHUB_USER")
+	static        = "/static/desktop/"
 	cookieSource  = securecookie.New(securecookie.GenerateRandomKey(32), securecookie.GenerateRandomKey(32))
 	target        = flag.String("target", "http://127.0.0.1:8080", "the target host/port")
 	port          = flag.String("port", "8888", "the port to serve on")
@@ -138,8 +139,10 @@ func newPathTrimmingReverseProxy(target *url.URL) *httputil.ReverseProxy {
 		Director: func(req *http.Request) {
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
-			req.URL.Path = strings.TrimPrefix(req.URL.Path, strings.TrimSuffix(servicePrefix, "/"))
-			req.URL.RawPath = strings.TrimPrefix(req.URL.RawPath, strings.TrimSuffix(servicePrefix, "/"))
+			if !strings.Contains(req.URL.Path, static) {
+				req.URL.Path = strings.TrimPrefix(req.URL.Path, strings.TrimSuffix(servicePrefix, "/"))
+				req.URL.RawPath = strings.TrimPrefix(req.URL.RawPath, strings.TrimSuffix(servicePrefix, "/"))
+			}
 			if _, ok := req.Header["User-Agent"]; !ok {
 				req.Header.Set("User-Agent", "") // explicitly disable User-Agent so it's not set to default value
 			}
