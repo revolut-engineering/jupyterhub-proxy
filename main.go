@@ -139,6 +139,8 @@ func newPathTrimmingReverseProxy(target *url.URL) *httputil.ReverseProxy {
 		Director: func(req *http.Request) {
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
+
+			// Static files need to maintain the complete request path
 			if !strings.Contains(req.URL.Path, static) {
 				req.URL.Path = strings.TrimPrefix(req.URL.Path, strings.TrimSuffix(servicePrefix, "/"))
 				req.URL.RawPath = strings.TrimPrefix(req.URL.RawPath, strings.TrimSuffix(servicePrefix, "/"))
