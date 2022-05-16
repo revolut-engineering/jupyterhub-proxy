@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,16 +20,18 @@ import (
 )
 
 var (
-	cookieName    = "jh-proxy-auth"
-	hubApi        = os.Getenv("JUPYTERHUB_API_URL")
-	apiToken      = os.Getenv("JUPYTERHUB_API_TOKEN")
-	clientId      = os.Getenv("JUPYTERHUB_CLIENT_ID")
-	callbackUrl   = os.Getenv("JUPYTERHUB_OAUTH_CALLBACK_URL")
-	servicePrefix = os.Getenv("JUPYTERHUB_SERVICE_PREFIX")
-	jhUser        = os.Getenv("JUPYTERHUB_USER")
-	cookieSource  = securecookie.New(securecookie.GenerateRandomKey(32), securecookie.GenerateRandomKey(32))
-	target        = flag.String("target", "http://127.0.0.1:8080", "the target host/port")
-	port          = flag.String("port", "8888", "the port to serve on")
+	cookieName      = "jh-proxy-auth"
+	hubApi          = os.Getenv("JUPYTERHUB_API_URL")
+	apiToken        = os.Getenv("JUPYTERHUB_API_TOKEN")
+	clientId        = os.Getenv("JUPYTERHUB_CLIENT_ID")
+	callbackUrl     = os.Getenv("JUPYTERHUB_OAUTH_CALLBACK_URL")
+	servicePrefix   = os.Getenv("JUPYTERHUB_SERVICE_PREFIX")
+	jhUser          = os.Getenv("JUPYTERHUB_USER")
+	hue_paths       = os.Getenv("HUE_PATHS")
+	cookieSource    = securecookie.New(securecookie.GenerateRandomKey(32), securecookie.GenerateRandomKey(32))
+	target          = flag.String("target", "http://127.0.0.1:8080", "the target host/port")
+	port            = flag.String("port", "8888", "the port to serve on")
+	modify_response = flag.Bool("modify_response", false, "modifies paths in response")
 )
 
 type JHOAuthHandler struct {
@@ -120,7 +125,7 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ah JHOAuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Println(r.URL.Path)
+	log.Println("Received: ", r.URL.Path)
 	if validateCookie(r) {
 		ah.wrappedHandler.ServeHTTP(w, r)
 	} else if r.URL.Path == callbackUrl {
@@ -133,34 +138,83 @@ func (ah JHOAuthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newPathTrimmingReverseProxy(target *url.URL) *httputil.ReverseProxy {
-	return &httputil.ReverseProxy{
+func newPathTrimmingReverseProxy(target *url.URL, modify_response bool) *httputil.ReverseProxy {
+
+	proxy := &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
+
 			req.URL.Path = strings.TrimPrefix(req.URL.Path, strings.TrimSuffix(servicePrefix, "/"))
 			req.URL.RawPath = strings.TrimPrefix(req.URL.RawPath, strings.TrimSuffix(servicePrefix, "/"))
+
+			log.Println("Modified: " + req.URL.Path)
 			if _, ok := req.Header["User-Agent"]; !ok {
 				req.Header.Set("User-Agent", "") // explicitly disable User-Agent so it's not set to default value
 			}
 		},
 	}
+
+	if modify_response {
+		// The matching string that is used to append the service prefix
+		matching := "(['\"])(" + hue_paths + ")"
+		log.Println("Path to modify: ", matching)
+		reg, err := regexp.Compile(matching)
+		if err != nil {
+			log.Println("Regex compile failed: %s", err)
+			os.Exit(1)
+		}
+
+		proxy.ModifyResponse = func(resp *http.Response) (err error) {
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+
+			err = resp.Body.Close()
+			if err != nil {
+				return err
+			}
+
+			complete_location := "$1" + strings.TrimSuffix(servicePrefix, "/") + "$2"
+			b = reg.ReplaceAll(b, []byte(complete_location))
+			body := ioutil.NopCloser(bytes.NewReader(b))
+
+			resp.Body = body
+			resp.ContentLength = int64(len(b))
+			resp.Header.Set("Content-Length", strconv.Itoa(len(b)))
+
+			location := resp.Header.Get("Location")
+			if location != "" {
+				new_location := strings.TrimSuffix(servicePrefix, "/") + location
+				log.Println("Redirection: " + new_location)
+				resp.Header.Set("Location", new_location)
+			}
+
+			return nil
+		}
+	}
+
+	return proxy
 }
 
 func main() {
 	flag.Parse()
 	backend, err := url.Parse(*target)
+	log.Println("Target: ", *target)
+
 	if err != nil {
 		log.Fatalln(err)
 	}
 	handler := JHOAuthHandler{
-		wrappedHandler: newPathTrimmingReverseProxy(backend),
+		wrappedHandler: newPathTrimmingReverseProxy(backend, *modify_response),
 	}
 
 	// wait until target is reachable
 	for {
 		res, err := http.Get(backend.String())
 		if err == nil && res.StatusCode == 200 {
+			log.Println("Reached target")
 			break
 		}
 		time.Sleep(1 * time.Second)
