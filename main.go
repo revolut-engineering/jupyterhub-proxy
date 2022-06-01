@@ -11,7 +11,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -156,14 +155,7 @@ func newPathTrimmingReverseProxy(target *url.URL, modify_response bool) *httputi
 	}
 
 	if modify_response {
-		// The matching string that is used to append the service prefix
-		matching := "(['\"])(" + hue_paths + ")"
-		log.Println("Path to modify: ", matching)
-		reg, err := regexp.Compile(matching)
-		if err != nil {
-			log.Println("Regex compile failed: %s", err)
-			os.Exit(1)
-		}
+		linker := new_linker(hue_paths)
 
 		proxy.ModifyResponse = func(resp *http.Response) (err error) {
 			b, err := ioutil.ReadAll(resp.Body)
@@ -176,8 +168,7 @@ func newPathTrimmingReverseProxy(target *url.URL, modify_response bool) *httputi
 				return err
 			}
 
-			complete_location := "$1" + strings.TrimSuffix(servicePrefix, "/") + "$2"
-			b = reg.ReplaceAll(b, []byte(complete_location))
+			b = linker.replace(b, servicePrefix)
 			body := ioutil.NopCloser(bytes.NewReader(b))
 
 			resp.Body = body
