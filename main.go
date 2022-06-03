@@ -151,6 +151,8 @@ func newPathTrimmingReverseProxy(target *url.URL, modify_response bool) *httputi
 			if _, ok := req.Header["User-Agent"]; !ok {
 				req.Header.Set("User-Agent", "") // explicitly disable User-Agent so it's not set to default value
 			}
+
+			correct_headers(&req.Header, servicePrefix)
 		},
 	}
 
@@ -175,7 +177,7 @@ func newPathTrimmingReverseProxy(target *url.URL, modify_response bool) *httputi
 			resp.ContentLength = int64(len(b))
 			resp.Header.Set("Content-Length", strconv.Itoa(len(b)))
 
-			correct_headers(resp, servicePrefix)
+			correct_headers(&resp.Header, servicePrefix)
 			return nil
 		}
 	}
