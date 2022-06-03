@@ -8,7 +8,7 @@ type TestCase struct {
 }
 
 func TestLinker(t *testing.T) {
-	paths := `/static/|/debug/|/static`
+	paths := `/static/|/debug/`
 
 	linker := new_linker(paths)
 	prefix := "/user/user@comp/"
@@ -16,16 +16,9 @@ func TestLinker(t *testing.T) {
 	cases := []TestCase{
 		{"'/static/file/something.css'", "'/user/user@comp/static/file/something.css'"},
 		{"'/debug/something.js'", "'/user/user@comp/debug/something.js'"},
-		{`\/static\/something.js`, `\/user\/user@comp\/static\/something.js`},
 		{
-			`if (/\.js$/.test(filename)) {
-            const relativePathMatch = compilation.outputOptions.path.match(
-              /.*(\/static\/desktop\/js\/bundles\/.*)$/
-            );`,
-			`if (/\.js$/.test(filename)) {
-            const relativePathMatch = compilation.outputOptions.path.match(
-              /.*(\/user\/user@comp\/static\/desktop\/js\/bundles\/.*)$/
-            );`,
+			`sourceMappingURL=/static/desktop/js/bundles/hue/defaultVendors~hue-cdd60c62-bundle-5ac0133f57e0`,
+			`sourceMappingURL=/user/user@comp/static/desktop/js/bundles/hue/defaultVendors~hue-cdd60c62-bundle-5ac0133f57e0`,
 		},
 		{
 			`<link href="/static/desktop/css/roboto.895233d7bf84.css" rel="stylesheet">
