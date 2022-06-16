@@ -26,6 +26,22 @@ func TestLinker(t *testing.T) {
 			`<link href="/user/user@comp/static/desktop/css/roboto.895233d7bf84.css" rel="stylesheet">
 			<link href="/user/user@comp/static/desktop/ext/css/font-awesome.min.bf0c425cdb73.css" rel="stylesheet">`,
 		},
+		{
+			`link = window.HUE_BASE_URL + '/hue' + link;`,
+			`link = window.HUE_BASE_URL + link;`,
+		},
+		{
+			`link = window.HUE_BASE_URL+'/hue'+link;`,
+			`link = window.HUE_BASE_URL+link;`,
+		},
+		{
+			`page__WEBPACK_IMPORTED_MODULE_3___default().base(window.HUE_BASE_URL + '/hue');`,
+			`page__WEBPACK_IMPORTED_MODULE_3___default().base(window.HUE_BASE_URL);`,
+		},
+		{
+			`var prefix = '/hue';`,
+			`var prefix = '';`,
+		},
 	}
 
 	for _, tc := range cases {
