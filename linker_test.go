@@ -32,7 +32,11 @@ func TestLinker(t *testing.T) {
 		},
 		{
 			`link = window.HUE_BASE_URL+'/hue'+link;`,
-			`link = window.HUE_BASE_URL +link;`,
+			`link = window.HUE_BASE_URL+link;`,
+		},
+		{
+			`page__WEBPACK_IMPORTED_MODULE_3___default().base(window.HUE_BASE_URL + '/hue');`,
+			`page__WEBPACK_IMPORTED_MODULE_3___default().base(window.HUE_BASE_URL);`,
 		},
 	}
 
